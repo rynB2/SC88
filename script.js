@@ -976,7 +976,9 @@ var categories = {
 };
 var categoryNames = Object.keys(categories);
 var instrumentNames = [];
-var lastInstrumentIdx = -1;
+
+var lastCategoryIdx = null;
+var lastInstrumentIdx = null;
 
 function HandleMIDI(e) {
   e.send();
@@ -997,11 +999,21 @@ function sendBankAndPC(entry) {
   p.number = entry.pc;
   p.sendAfterMilliseconds(2);
 }
-var ignoreNextInstrument = false;
+
+function sendCC(num, val) {
+  var cc = new ControlChange();
+  cc.number = num;
+  cc.value = val;
+  cc.send();
+}
 
 function ParameterChanged(p, v) {
   if (p === 0) {
-    var cat = categoryNames[Math.floor(v)];
+    var idx = Math.floor(v);
+    if (idx === lastCategoryIdx) return;
+    lastCategoryIdx = idx;
+
+    var cat = categoryNames[idx];
     var pcs = categories[cat];
     instrumentNames = instruments
       .filter((i) => pcs.includes(i.pc))
@@ -1009,21 +1021,22 @@ function ParameterChanged(p, v) {
 
     PluginParameters[1].valueStrings = instrumentNames;
     UpdatePluginParameters();
-
-    // prevent the auto-trigger from firing
-    ignoreNextInstrument = true;
-    lastInstrumentIdx = -1;
+    lastInstrumentIdx = null;
   } else if (p === 1) {
     var idx = Math.floor(v);
-    if (ignoreNextInstrument) {
-      ignoreNextInstrument = false;
-      return; // swallow the phantom call
-    }
-    if (idx !== lastInstrumentIdx && instrumentNames[idx]) {
-      var e = instruments.find((i) => i.name === instrumentNames[idx]);
-      if (e) sendBankAndPC(e);
-      lastInstrumentIdx = idx;
-    }
+    if (idx === lastInstrumentIdx) return;
+    lastInstrumentIdx = idx;
+
+    var e =
+      instrumentNames[idx] &&
+      instruments.find((i) => i.name === instrumentNames[idx]);
+    if (e) sendBankAndPC(e);
+  } else if (p === 2) {
+    sendCC(10, Math.floor(v)); // pan
+  } else if (p === 3) {
+    sendCC(91, Math.floor(v)); // reverb depth
+  } else if (p === 4) {
+    sendCC(93, Math.floor(v)); // chorus depth
   }
 }
 
@@ -1038,6 +1051,30 @@ var PluginParameters = [
     name: "Instrument",
     type: "menu",
     valueStrings: instrumentNames,
+    defaultValue: 0,
+  },
+  {
+    name: "Pan",
+    type: "lin",
+    minValue: 0,
+    maxValue: 127,
+    numberOfSteps: 127,
+    defaultValue: 64,
+  },
+  {
+    name: "Reverb",
+    type: "lin",
+    minValue: 0,
+    maxValue: 127,
+    numberOfSteps: 127,
+    defaultValue: 40,
+  },
+  {
+    name: "Chorus",
+    type: "lin",
+    minValue: 0,
+    maxValue: 127,
+    numberOfSteps: 127,
     defaultValue: 0,
   },
 ];
