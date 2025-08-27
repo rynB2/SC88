@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-undef */
 var CC0 = 0; // bank select msb
 var CC32 = 32; // bank select lsb
 var MAP_LSB = 3; // fixed for native map
@@ -953,7 +955,28 @@ var instruments = [
   { name: "Big Shot", pc: 127, var: 5 },
 ];
 
-var names = instruments.map((i) => i.name);
+var categories = {
+  "🎹 Pianos": [0, 1, 2, 3, 4, 5, 6, 7],
+  "🔔 Chromatic Percussion": [8, 9, 10, 11, 12, 13, 14, 15],
+  "🎛️ Organ": [16, 17, 18, 19, 20, 21, 22, 23],
+  "🎸 Guitar": [24, 25, 26, 27, 28, 29, 30, 31],
+  "🎵 Bass": [32, 33, 34, 35, 36, 37, 38, 39],
+  "🎻 Strings/Orchestra": [
+    40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
+  ],
+  "🎺 Brass": [56, 57, 58, 59, 60, 61, 62, 63],
+  "🎷 Reed": [64, 65, 66, 67, 68, 69, 70, 71],
+  "🍃 Pipe": [72, 73, 74, 75, 76, 77, 78, 79],
+  "🎤 Synth Lead": [80, 81, 82, 83, 84, 85, 86, 87],
+  "☁️ Synth Pad": [88, 89, 90, 91, 92, 93, 94, 95],
+  "🌌 Synth SFX": [96, 97, 98, 99, 100, 101, 102, 103],
+  "🌍 Ethnic": [104, 105, 106, 107, 108, 109, 110, 111],
+  "🥁 Percussive": [112, 113, 114, 115, 116, 117, 118, 119],
+  "💥 SFX": [120, 121, 122, 123, 124, 125, 126, 127],
+};
+var categoryNames = Object.keys(categories);
+var instrumentNames = [];
+var lastInstrumentIdx = -1;
 
 function HandleMIDI(e) {
   e.send();
@@ -974,20 +997,47 @@ function sendBankAndPC(entry) {
   p.number = entry.pc;
   p.sendAfterMilliseconds(2);
 }
+var ignoreNextInstrument = false;
 
 function ParameterChanged(p, v) {
   if (p === 0) {
-    var idx = Math.floor(v);
-    var e = instruments[idx];
-    if (e) sendBankAndPC(e);
+    var cat = categoryNames[Math.floor(v)];
+    var pcs = categories[cat];
+    instrumentNames = instruments
+      .filter((i) => pcs.includes(i.pc))
+      .map((i) => i.name);
+
+    PluginParameters[1].valueStrings = instrumentNames;
+    UpdatePluginParameters();
+
+    // prevent the auto-trigger from firing
+    ignoreNextInstrument = true;
+    lastInstrumentIdx = -1;
   } else if (p === 1) {
-    var idx = Math.floor(GetParameter(0));
-    var e = instruments[idx];
-    if (e) sendBankAndPC(e);
+    var idx = Math.floor(v);
+    if (ignoreNextInstrument) {
+      ignoreNextInstrument = false;
+      return; // swallow the phantom call
+    }
+    if (idx !== lastInstrumentIdx && instrumentNames[idx]) {
+      var e = instruments.find((i) => i.name === instrumentNames[idx]);
+      if (e) sendBankAndPC(e);
+      lastInstrumentIdx = idx;
+    }
   }
 }
 
 var PluginParameters = [
-  { name: "Instrument", type: "menu", valueStrings: names },
-  { name: "Send Now", type: "momentary" },
+  {
+    name: "Categories",
+    type: "menu",
+    valueStrings: categoryNames,
+    defaultValue: 0,
+  },
+  {
+    name: "Instrument",
+    type: "menu",
+    valueStrings: instrumentNames,
+    defaultValue: 0,
+  },
 ];
